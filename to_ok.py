@@ -8,6 +8,8 @@ import pathlib
 import pprint
 import os
 import re
+import shutil
+import subprocess
 import yaml
 
 from collections import namedtuple
@@ -16,30 +18,32 @@ NB_VERSION = 4
 BLOCK_QUOTE = "```"
 COMMENT_PREFIX = "#"
 TEST_HEADERS = ["TEST", "HIDDEN TEST"]
+ALLOWED_NAME = re.compile(r'[A-Za-z][A-Za-z0-9_]*')
+NB_VERSION = 4
 
 
-def convert_to_ok(nb, dir, endpoint):
+def convert_to_ok(nb_path, dir, endpoint):
     """Convert a master notebook to an ok notebook, tests dir, and .ok file.
 
     nb -- Path
     endpoint -- OK endpoint for notebook submission (e.g., cal/data100/sp19)
     dir -- Path
     """
-    master_nb = nbformat.read(open(nb), NB_VERSION)
-    ok_nb_path = dir / nb.name
-
+    ok_nb_path = dir / nb_path.name
     tests_dir = dir / 'tests'
     os.makedirs(tests_dir, exist_ok=True)
     open(tests_dir / '__init__.py', 'a').close()
 
-    ok_nb = copy.deepcopy(master_nb)
-    ok_cells, require_pdf = gen_ok_cells(master_nb, tests_dir)
+    nb = nbformat.read(open(nb_path), NB_VERSION)
+    ok_cells, require_pdf = gen_ok_cells(nb['cells'], tests_dir)
     dot_ok_name = gen_dot_ok(ok_nb_path, endpoint, require_pdf)
     init, submit = gen_init_cell(dot_ok_name), gen_submit_cell(require_pdf)
-    ok_nb['cells'] = [init] + ok_cells + [submit]
-    remove_output(ok_nb)
+    nb['cells'] = [init] + ok_cells + [submit]
+    remove_output(nb)
+
     with open(ok_nb_path, 'w') as f:
-        nbformat.write(ok_nb, f, NB_VERSION)
+        nbformat.write(nb, f, NB_VERSION)
+    return ok_nb_path
 
 
 def gen_dot_ok(notebook_path, endpoint, has_pdf):
@@ -84,7 +88,7 @@ def gen_submit_cell(require_pdf):
     return cell
 
 
-def gen_ok_cells(master_nb, tests_dir):
+def gen_ok_cells(cells, tests_dir):
     """Generate notebook cells for the OK version of a master notebook."""
     ok_cells = []
     question = {}
@@ -92,29 +96,29 @@ def gen_ok_cells(master_nb, tests_dir):
     tests = []
     require_pdf = False
 
-    for cell in master_nb['cells']:
+    for cell in cells:
         if question and not processed_response:
             assert not is_question_cell(cell), cell
             assert not is_test_cell(cell), cell
             ok_cells.append(cell)
             processed_response = True
-        elif question and processed_response:
-            if is_test_cell(cell):
-                tests.append(read_test(cell))
-            else:
+        elif question and processed_response and is_test_cell(cell):
+            tests.append(read_test(cell))
+        else:
+            if question and processed_response:
                 # The question is over
                 if tests:
                     ok_cells.append(gen_test_cell(question, tests, tests_dir))
                 question, processed_response, tests = {}, False, []
+            if is_question_cell(cell):
                 # TODO(denero) format notebook for PDF generation
-        elif is_question_cell(cell):
-            ok_cells.append(cell) # TODO(denero) hide metadata in an HTML comment?
-            question = read_question_metadata(cell)
-            if question.get('manual', False):
-                require_pdf = True
-        else:
-            assert not is_test_cell(cell), 'Test cell outside of a question: ' + str(cell)
-            ok_cells.append(cell)
+                ok_cells.append(cell) # TODO(denero) hide metadata in an HTML comment?
+                question = read_question_metadata(cell)
+                if question.get('manual', False):
+                    require_pdf = True
+            else:
+                assert not is_test_cell(cell), 'Test outside of a question: ' + str(cell)
+                ok_cells.append(cell)
 
     if tests:
         ok_cells.append(gen_test_cell(question, tests, tests_dir))
@@ -161,7 +165,7 @@ def read_question_metadata(cell):
         lines.append(source[i])
         i = i + 1
     metadata = yaml.load('\n'.join(lines))
-    assert 'name' in metadata, metadata
+    assert ALLOWED_NAME.match(metadata.get('name', '')), metadata
     return metadata
 
 
@@ -252,7 +256,11 @@ def solution_line_sub(match):
 
 text_solution_line_re = re.compile(r'\s*\*\*SOLUTION:?\*\*:?.*')
 def text_solution_line_sub(match):
-    return '"*Write your answer here, replacing this text.*"'
+    return '*Write your answer here, replacing this text.*'
+
+
+begin_solution_re = re.compile(r'(\s*)# BEGIN SOLUTION( NO PROMPT)?')
+skip_suffixes = ['# SOLUTION NO PROMPT', '# BEGIN PROMPT', '# END PROMPT']
 
 
 SUBSTITUTIONS = [
@@ -262,23 +270,43 @@ SUBSTITUTIONS = [
 ]
 
 
-def strip_solutions(cell):
-    """Return a cell with solutions removed."""
-    lines = get_source(cell)
-    result_lines = []
+def replace_solutions(lines):
+    """Replace solutions in lines, a list of strings."""
+    stripped = []
+    solution = False
     for line in lines:
+        if any(line.endswith(s) for s in skip_suffixes):
+            continue
+        if solution and not line.endswith('# END SOLUTION'):
+            continue
+        if line.endswith('# END SOLUTION'):
+            assert solution, 'END SOLUTION without BEGIN SOLUTION in ' + str(lines)
+            solution = False
+            continue
+        begin_solution = begin_solution_re.match(line)
+        if begin_solution:
+            assert not solution, 'Nested BEGIN SOLUTION in ' + str(lines)
+            solution = True
+            if not begin_solution.group(2):
+                line = begin_solution.group(1) + '...'
+            else:
+                continue
         for re, sub in SUBSTITUTIONS:
             m = re.match(line)
             if m:
                 line = sub(m)
-        result_lines.append(line)
-    # TODO(denero) Add multi-line solution
-    result = copy.deepcopy(cell)
-    result['source'] = result_lines # TODO(denero) does this work with nbformat?
-    return result
+        stripped.append(line)
+    assert not solution, 'BEGIN SOLUTION without END SOLUTION in ' + str(lines)
+    return stripped
 
 
-NB_VERSION = 4
+def strip_solutions(original_nb_path, stripped_nb_path):
+    """Write a notebook with solutions stripped."""
+    nb = nbformat.read(open(original_nb_path), NB_VERSION)
+    for cell in nb['cells']:
+        cell['source'] = '\n'.join(replace_solutions(get_source(cell)))
+    with open(stripped_nb_path, 'w') as f:
+        nbformat.write(nb, f, NB_VERSION)
 
 
 def remove_output(nb):
@@ -288,7 +316,6 @@ def remove_output(nb):
             cell['outputs'] = []
 
 
-
 def gen_views(master_nb, result_dir, endpoint):
     """Generate student and autograder views.
 
@@ -296,9 +323,24 @@ def gen_views(master_nb, result_dir, endpoint):
     result_dir -- Path to the result directory
     """
     autograder_dir = result_dir / 'autograder'
+    student_dir = result_dir / 'student'
+    trash_dir = result_dir / 'trash'
     os.makedirs(autograder_dir, exist_ok=True)
-    convert_to_ok(master_nb, autograder_dir, endpoint)
-    # TODO Gen student view
+    ok_nb_path = convert_to_ok(master_nb, autograder_dir, endpoint)
+    shutil.copytree(autograder_dir, student_dir)
+    student_nb_path = student_dir / ok_nb_path.name
+    os.remove(student_nb_path)
+    strip_solutions(ok_nb_path, student_nb_path)
+
+    # Remove hidden tests and clean up. TODO(denero) Simplify!
+    with open(os.devnull, 'w') as null:
+        subprocess.Popen(['ok', '--local', '--no-update', '--lock', '-u'],
+                         cwd=student_dir,
+                         stdout=null,
+                         ).wait()
+    os.makedirs(trash_dir, exist_ok=True)
+    shutil.move(str(student_dir / '.ok_history'), str(trash_dir))
+    shutil.move(str(student_dir / 'tests' / '__pycache__'), str(trash_dir))
 
 
 def parse_args():

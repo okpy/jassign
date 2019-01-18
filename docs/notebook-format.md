@@ -1,4 +1,4 @@
-# Creating Notebooks with Embedded Tests
+# Notebook Assignments with Embedded Solutions and Tests
 
 The following specification for embedding tests into a Jupyter notebook has the
 following characteristics:
@@ -48,7 +48,73 @@ is not distributed to students, but is used for scoring their work.
 
 ## Solution Removal
 
-**TODO(denero) specify solution stripping.**
+Solutions are only removed from response cells, which appear immediately after
+question cells. Solutions that should be hidden from students can be formatted
+in the following ways.
+
+* A line ending in `# SOLUTION` will be replaced by `...`, properly indented. If
+  that line is an assignment statement, then only the expression(s) after the
+  `=` symbol will be replaced.
+* A line ending in `# SOLUTION NO PROMPT` will be removed.
+
+```python
+def square(x):
+    y = x * x # SOLUTION NO PROMPT
+    return y # SOLUTION
+
+nine = square(3) # SOLUTION
+```
+
+would be presented to students as
+
+```python
+def square(x):
+    ...
+
+nine = ...
+```
+
+* A line `# BEGIN SOLUTION` or `# BEGIN SOLUTION NO PROMPT` must be paired with
+  a later line `# END SOLUTION`. All lines in between are replaced with `...` or
+  removed completely in the case of `NO PROMPT`.
+* A line `""" # BEGIN PROMPT` must be paired with a later line `""" # END
+  PROMPT`. The contents of this multiline string (excluding the `# BEGIN
+  PROMPT`) appears in the student cell. Single or double quotes are allowed.
+  Optionally, `"""; # END PROMPT` to suppress output.
+
+```python
+pi = 3.14
+if True:
+    # BEGIN SOLUTION
+    radius = 3
+    area = radius * pi * pi
+    # END SOLUTION
+    print('A circle with radius', radius, 'has area', area)
+def circumference(r):
+    # BEGIN SOLUTION NO PROMPT
+    return 2 * pi * r
+    # END SOLUTION
+    """ # BEGIN PROMPT
+    # Next, define a circumference function.
+    pass
+    """; # END PROMPT
+```
+
+would be presented to students as
+
+```python
+pi = 3.14
+if True:
+    ...
+    print('A circle with radius', radius, 'has area', area)
+def circumference(r):
+    # Next, define a circumference function.
+    pass
+```
+
+* A line starting with `**SOLUTION**` or `**SOLUTION:**` is replaced with
+  `*Write your answer here, replacing this text.*`, which will be rendered as
+  italics within a Markdown cell.
 
 ## More info
 
