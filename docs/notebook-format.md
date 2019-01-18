@@ -1,7 +1,7 @@
 # Notebook Assignments with Embedded Solutions and Tests
 
-The following specification for embedding tests into a Jupyter notebook has the
-following characteristics:
+The following specification for embedding tests into a Jupyter notebook has
+these characteristics:
 
 1. Each test is a cell with the expressions or statements to be evaluated. The
    expected output of the test is the output of the cell.
