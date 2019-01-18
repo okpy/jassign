@@ -7,11 +7,10 @@ following characteristics:
    expected output of the test is the output of the cell.
 2. Tests are grouped into questions, and each question has associated metadata
    such as the question name and number of points.
-3. Metadata about questions and assignments are expressed within notebook cells
-   in YAML.
+3. Metadata are expressed within notebook cells in YAML.
 
-This format is designed for easy assignment authoring. Typically, a notebook in
-this format will be converted to the [OK
+This format is designed for easy assignment authoring. A notebook in this format
+can be converted automatically to the [OK
 format](https://github.com/data-8/Gofer-Grader/blob/master/docs/ok-test-format.md)
 before it is distributed to students.
 
@@ -21,10 +20,13 @@ An example question within a notebook:
 
 <img src="example-question.png" />
 
+Also see this [longer example
+notebook](https://github.com/okpy/jupyter-assignment/blob/master/tests/example.ipynb).
+
 A question is a description *Markdown* cell, followed by a response cell,
-followed by zero or more test *Code* cells. The description cell must contain a
-code block (enclosed in triple backticks) that begins with a `BEGIN QUESTION`
-header line, followed by YAML that defines metadata associated with the
+followed by zero or more test *code* cells. The description cell must contain a
+code block (enclosed in triple backticks) that begins with `BEGIN QUESTION` on
+its own line, followed by YAML that defines metadata associated with the
 question.
 
 The rest of the code block within the description cell must be YAML-formatted
@@ -46,11 +48,18 @@ comment containing either the capitalized word `TEST` or `HIDDEN TEST`. A `TEST`
 is distributed to students so that they can validate their work. A `HIDDEN TEST`
 is not distributed to students, but is used for scoring their work.
 
+**Note:** Currently, the conversion to ok format does not handle multi-line
+tests if any line but the last one generates output. So, if you want to print
+twice, make two separate test cells instead of:
+
+```python
+print(1)
+print(2)
+```
+
 ## Solution Removal
 
-Solutions are only removed from response cells, which appear immediately after
-question cells. Solutions that should be hidden from students can be formatted
-in the following ways.
+Solutions are removed from all cells if formatted as follows.
 
 * A line ending in `# SOLUTION` will be replaced by `...`, properly indented. If
   that line is an assignment statement, then only the expression(s) after the
@@ -80,7 +89,7 @@ nine = ...
 * A line `""" # BEGIN PROMPT` must be paired with a later line `""" # END
   PROMPT`. The contents of this multiline string (excluding the `# BEGIN
   PROMPT`) appears in the student cell. Single or double quotes are allowed.
-  Optionally, `"""; # END PROMPT` to suppress output.
+  Optionally, a semicolon can be used to suppress output: `"""; # END PROMPT`
 
 ```python
 pi = 3.14
