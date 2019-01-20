@@ -1,10 +1,8 @@
 """Generate student & autograder views of a notebook in okpy format."""
 
-import argparse
 import copy
 import json
 import nbformat
-import pathlib
 import pprint
 import os
 import re
@@ -112,8 +110,8 @@ def gen_ok_cells(cells, tests_dir):
                 question, processed_response, tests = {}, False, []
             if is_question_cell(cell):
                 # TODO(denero) format notebook for PDF generation
-                ok_cells.append(cell) # TODO(denero) hide metadata in an HTML comment?
                 question = read_question_metadata(cell)
+                ok_cells.append(gen_question_cell(cell))
                 if question.get('manual', False):
                     require_pdf = True
             else:
@@ -154,11 +152,25 @@ def find_question_spec(source):
     return begins[0] if begins else None
 
 
+def gen_question_cell(cell):
+    """Return the cell with metadata hidden in an HTML comment."""
+    source = get_source(cell)
+    begin_question_line = find_question_spec(source)
+    start = begin_question_line - 1
+    assert source[start].strip() == BLOCK_QUOTE
+    end = begin_question_line
+    while source[end].strip() != BLOCK_QUOTE:
+        end += 1
+    source[start] = "<!--"
+    source[end] = "-->"
+    q = copy.deepcopy(cell)
+    q['source'] = '\n'.join(source)
+    return q
+
+
 def read_question_metadata(cell):
     """Return question metadata from a question cell."""
     source = get_source(cell)
-    if isinstance(source, str):
-        source = source.split('\n')
     begin_question_line = find_question_spec(source)
     i, lines = begin_question_line + 1, []
     while source[i].strip() != BLOCK_QUOTE:
@@ -343,15 +355,3 @@ def gen_views(master_nb, result_dir, endpoint):
     shutil.move(str(student_dir / 'tests' / '__pycache__'), str(trash_dir))
 
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("master", help="Notebook with solutions and tests.")
-    parser.add_argument("result", help="Directory containing the result.")
-    parser.add_argument("endpoint", help="OK endpoint; e.g., cal/data8/sp19")
-    return parser.parse_args()
-
-
-if __name__ == "__main__":
-    args = parse_args()
-    gen_views(pathlib.Path(args.master), pathlib.Path(args.result),
-              args.endpoint)
