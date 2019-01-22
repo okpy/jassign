@@ -1,4 +1,6 @@
-# Notebook Assignments with Embedded Solutions and Tests
+# Notebook Format for Assignment Authors
+
+A format for Jupyter notebook assignments with embedded solutions and tests.
 
 The following specification for embedding tests into a Jupyter notebook has
 these characteristics:

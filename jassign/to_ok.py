@@ -35,7 +35,8 @@ def convert_to_ok(nb_path, dir, endpoint):
     nb = nbformat.read(open(nb_path), NB_VERSION)
     ok_cells, require_pdf = gen_ok_cells(nb['cells'], tests_dir)
     dot_ok_name = gen_dot_ok(ok_nb_path, endpoint, require_pdf)
-    init, submit = gen_init_cell(dot_ok_name), gen_submit_cell(require_pdf)
+    init = gen_init_cell(dot_ok_name)
+    submit = gen_submit_cell(nb_path, require_pdf)
     nb['cells'] = [init] + ok_cells + [submit]
     remove_output(nb)
 
@@ -50,8 +51,6 @@ def gen_dot_ok(notebook_path, endpoint, has_pdf):
     ok_path = notebook_path.with_suffix('.ok')
     name = notebook_path.stem
     src = [notebook_path.name]
-    if has_pdf:
-        src.append(notebook_path.with_suffix('.pdf').name)
     with open(ok_path, 'w') as out:
         json.dump({
             "name": name,
@@ -75,14 +74,22 @@ def gen_init_cell(dot_ok_name):
     cell.source = ("# Initialize OK\n"
     "from client.api.notebook import Notebook\n"
     "ok = Notebook('{}')".format(dot_ok_name))
+    lock(cell)
     return cell
 
 
-def gen_submit_cell(require_pdf):
+def gen_submit_cell(nb_path, require_pdf):
     """Generate a submit cell."""
     cell = nbformat.v4.new_code_cell()
-    cell.source = ("ok.submit()")
-    # TODO add code to generate PDF
+    # TODO(denero) Force save.
+    source_lines = ["# Save your notebook first, then run this cell to submit."]
+    if require_pdf:
+        source_lines.append("import jassign.to_pdf")
+        source_lines.append("jassign.to_pdf.generate_pdf('{}', '{}')".format(
+            nb_path.name, nb_path.with_suffix('.pdf').name))
+    source_lines.append("ok.submit()")
+    cell.source = "\n".join(source_lines)
+    lock(cell)
     return cell
 
 
@@ -94,6 +101,7 @@ def gen_ok_cells(cells, tests_dir):
     tests = []
     require_pdf = False
 
+    # TODO(denero) Validate number of exported questions
     for cell in cells:
         if question and not processed_response:
             assert not is_question_cell(cell), cell
@@ -111,9 +119,10 @@ def gen_ok_cells(cells, tests_dir):
             if is_question_cell(cell):
                 # TODO(denero) format notebook for PDF generation
                 question = read_question_metadata(cell)
-                ok_cells.append(gen_question_cell(cell))
-                if question.get('manual', False):
+                manual = question.get('manual', False)
+                if manual:
                     require_pdf = True
+                ok_cells.append(gen_question_cell(cell, manual))
             else:
                 assert not is_test_cell(cell), 'Test outside of a question: ' + str(cell)
                 ok_cells.append(cell)
@@ -152,8 +161,9 @@ def find_question_spec(source):
     return begins[0] if begins else None
 
 
-def gen_question_cell(cell):
+def gen_question_cell(cell, manual):
     """Return the cell with metadata hidden in an HTML comment."""
+    cell = copy.deepcopy(cell)
     source = get_source(cell)
     begin_question_line = find_question_spec(source)
     start = begin_question_line - 1
@@ -163,9 +173,11 @@ def gen_question_cell(cell):
         end += 1
     source[start] = "<!--"
     source[end] = "-->"
-    q = copy.deepcopy(cell)
-    q['source'] = '\n'.join(source)
-    return q
+    if manual:
+        source.append('<!-- EXPORT TO PDF -->')
+    cell['source'] = '\n'.join(source)
+    lock(cell)
+    return cell
 
 
 def read_question_metadata(cell):
@@ -211,7 +223,7 @@ def gen_test_cell(question, tests, tests_dir):
     """Return a test cell."""
     cell = nbformat.v4.new_code_cell()
     cell.source = ['ok.grade("{}");'.format(question['name'])]
-    suites = [gen_suite(test) for test in tests]
+    suites = [gen_suite(tests)]
     test = {
         'name': question['name'],
         'points': question.get('points', 1),
@@ -221,11 +233,24 @@ def gen_test_cell(question, tests, tests_dir):
         f.write('test = ')
         # TODO(denero) Not the same indentation and line breaking that ok generates...
         pprint.pprint(test, f, indent=4)
+    lock(cell)
     return cell
 
 
-def gen_suite(test):
+def gen_suite(tests):
     """Generate an ok test suite for a test."""
+    cases = [gen_case(test) for test in tests]
+    return  {
+      'cases': cases,
+      'scored': True,
+      'setup': '',
+      'teardown': '',
+      'type': 'doctest'
+    }
+
+
+def gen_case(test):
+    """Generate an ok test case for a test."""
     # TODO(denero) This should involve a Python parser, but it doesn't...
     code_lines = []
     for line in test.input.split('\n'):
@@ -238,18 +263,10 @@ def gen_suite(test):
         if code_lines[i+1].startswith('>>>'):
             code_lines[i] += ';'
     code_lines.append(test.output)
-    return  {
-      'cases': [
-        {
-          'code': '\n'.join(code_lines),
-          'hidden': test.hidden,
-          'locked': False
-        },
-      ],
-      'scored': True,
-      'setup': '',
-      'teardown': '',
-      'type': 'doctest'
+    return {
+        'code': '\n'.join(code_lines),
+        'hidden': test.hidden,
+        'locked': False
     }
 
 
@@ -303,8 +320,8 @@ def replace_solutions(lines):
                 line = begin_solution.group(1) + '...'
             else:
                 continue
-        for re, sub in SUBSTITUTIONS:
-            m = re.match(line)
+        for exp, sub in SUBSTITUTIONS:
+            m = exp.match(line)
             if m:
                 line = sub(m)
         stripped.append(line)
@@ -328,6 +345,12 @@ def remove_output(nb):
             cell['outputs'] = []
 
 
+def lock(cell):
+    m = cell['metadata']
+    m["editable"] = False
+    m["deletable"] = False
+
+
 def gen_views(master_nb, result_dir, endpoint):
     """Generate student and autograder views.
 
@@ -344,14 +367,16 @@ def gen_views(master_nb, result_dir, endpoint):
     os.remove(student_nb_path)
     strip_solutions(ok_nb_path, student_nb_path)
 
-    # Remove hidden tests and clean up. TODO(denero) Simplify!
+    # Remove hidden tests and clean up. TODO(denero) Simplify! Don't call ok.
     with open(os.devnull, 'w') as null:
         subprocess.Popen(['ok', '--local', '--no-update', '--lock', '-u'],
                          cwd=student_dir,
                          stdout=null,
                          ).wait()
     os.makedirs(trash_dir, exist_ok=True)
-    shutil.move(str(student_dir / '.ok_history'), str(trash_dir))
-    shutil.move(str(student_dir / 'tests' / '__pycache__'), str(trash_dir))
+    if (student_dir / '.ok_history').exists():
+        shutil.move(str(student_dir / '.ok_history'), str(trash_dir))
+    if (student_dir / 'tests' / '__pycache__').exists():
+        shutil.move(str(student_dir / 'tests' / '__pycache__'), str(trash_dir))
 
 

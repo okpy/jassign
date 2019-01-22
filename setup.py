@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="jassign",
-    version="0.0.2",
+    version="0.0.3",
     author="John DeNero",
     author_email="denero@berkeley.edu",
     description="Jupyter notebook assignment formatting and distribution",
@@ -13,6 +13,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/okpy/jupyter-assignment",
     packages=setuptools.find_packages(),
+    package_data={'jassign': ['*.tplx']},
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

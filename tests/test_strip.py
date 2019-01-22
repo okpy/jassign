@@ -1,4 +1,4 @@
-from to_ok import replace_solutions
+from jassign.to_ok import replace_solutions
 
 examples = [
     ((
