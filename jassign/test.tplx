@@ -17,8 +17,8 @@
 ((* endblock docclass *))
 
 ((* block markdowncell scoped *))
-    ((*- if cell.source and "EXPORT TO PDF" in cell.source-*))
-    \clearpage
+    ((*- if cell.source and "EXPORT TO PDF" in cell.source -*))
+    \newpage
     ((*- endif -*))
 ((( super() )))
 ((* endblock markdowncell *))

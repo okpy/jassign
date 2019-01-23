@@ -260,7 +260,7 @@ def gen_case(test):
             code_lines.append('>>> ' + line)
     # Suppress intermediate output from evaluation
     for i in range(len(code_lines) - 1):
-        if code_lines[i+1].startswith('>>>'):
+        if code_lines[i+1].startswith('>>>') and len(code_lines[i].strip()) > 3:
             code_lines[i] += ';'
     code_lines.append(test.output)
     return {
@@ -284,10 +284,6 @@ def solution_line_sub(match):
 
 
 text_solution_line_re = re.compile(r'\s*\*\*SOLUTION:?\*\*:?.*')
-def text_solution_line_sub(match):
-    return '*Write your answer here, replacing this text.*'
-
-
 begin_solution_re = re.compile(r'(\s*)# BEGIN SOLUTION( NO PROMPT)?')
 skip_suffixes = ['# SOLUTION NO PROMPT', '# BEGIN PROMPT', '# END PROMPT']
 
@@ -295,12 +291,13 @@ skip_suffixes = ['# SOLUTION NO PROMPT', '# BEGIN PROMPT', '# END PROMPT']
 SUBSTITUTIONS = [
     (solution_assignment_re, solution_assignment_sub),
     (solution_line_re, solution_line_sub),
-    (text_solution_line_re, text_solution_line_sub),
 ]
 
 
 def replace_solutions(lines):
     """Replace solutions in lines, a list of strings."""
+    if text_solution_line_re.match(lines[0]):
+        return ['*Write your answer here, replacing this text.*']
     stripped = []
     solution = False
     for line in lines:
