@@ -24,4 +24,7 @@ setuptools.setup(
             'jassign = jassign.__main__:main'
         ]
     },
+    install_requires=[
+        "pyyaml", "okpy", "nbformat", "ipython", "nbconvert", "tqdm", "setuptools"
+    ],
 )
