@@ -17,7 +17,14 @@ import re
 import shutil
 
 
+def generate_pdf_cmdline(nb_path, pdf_path):
+    """Generate a PDF (used from the command line)"""
+    filtered = load_and_filter(nb_path)
+    export_notebook(filtered, pdf_path)
+
+
 def generate_pdf(nb_path, pdf_path, **kwargs):
+    """Generate a PDF (called from a notebook)"""
     assert run_from_ipython(), "You must run this from within a notebook"
     print("Generating PDF...")
     filtered = load_and_filter(nb_path)
@@ -63,6 +70,7 @@ def cell_by_cell(nb_path):
 
 QUESTION_TAG = re.compile(r"\s*<!--\s*EXPORT TO PDF\s*-->\s*")
 NUM_QUESTIONS_TAG = re.compile(r"\s*<!--\s*EXPECT (\d+) EXPORTED QUESTIONS\s*-->\s*")
+MATH_EXP = re.compile(r"\$[^$]+\$")
 
 
 def is_question_cell(cell):
@@ -75,9 +83,17 @@ def load_and_filter(nb_path):
     return filter_nb(nb)
 
 
-def fix_dollar_sign(cell):
+def fix_dollar_sign_in_source(cell):
     if 'cell_type' in cell and cell['cell_type'] == 'markdown':
-        cell['source'] = cell['source'].replace('$ ','$').replace(' $','$')
+        cell['source'] = fix_dollar_sign(cell['source'])
+
+
+def fix_dollar_sign(source):
+    return MATH_EXP.sub(strip_dollar_sign, source)
+
+
+def strip_dollar_sign(match):
+    return match.group(0).replace('$ ','$').replace(' $','$')
 
 
 def paraphrase(text,fromBegin=3,fromEnd=3):
@@ -109,8 +125,7 @@ def clean_cells(cells):
             print('This cell has a lot of content! Perhaps try to shorten your response. ')
             print("\n\n\n", cell['source'][:200])
 
-        # TODO(denero) Ask Dibya why this was here.
-        # fix_dollar_sign(cell)
+        fix_dollar_sign_in_source(cell)
 
 
 def check_num_questions(nb):
@@ -180,3 +195,5 @@ def run_from_ipython():
         return True
     except NameError:
         return False
+
+

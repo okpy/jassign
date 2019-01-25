@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="jassign",
-    version="0.0.4",
+    version="0.0.5",
     author="John DeNero",
     author_email="denero@berkeley.edu",
     description="Jupyter notebook assignment formatting and distribution",
@@ -21,7 +21,8 @@ setuptools.setup(
     ],
     entry_points = {
         'console_scripts': [
-            'jassign = jassign.__main__:main'
+            'jassign = jassign.jassign:main',
+            'jassign-pdf = jassign.jassign_pdf:main'
         ]
     },
 )

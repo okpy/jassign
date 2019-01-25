@@ -12,13 +12,15 @@
 
 ((* block docclass *))
 \documentclass[10pt]{article}
+\newcommand\cleartooddpage{\clearpage
+	\ifodd\value{page}\else\null\clearpage\fi}
 \date\today
 
 ((* endblock docclass *))
 
 ((* block markdowncell scoped *))
     ((*- if cell.source and "EXPORT TO PDF" in cell.source -*))
-    \newpage
+    \cleartooddpage
     ((*- endif -*))
 ((( super() )))
 ((* endblock markdowncell *))
