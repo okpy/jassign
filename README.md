@@ -23,4 +23,8 @@ jassign tests/example.ipynb tests/output some/course
 This command will create `tests/output` with a student version and an autograder
 version as subdirectories.
 
-For options, run: `jassign -h`
+You can then generate a PDF from the result:
+
+```python
+jassign-pdf tests/output/autograder/example.ipynb tests/output/autograder/example.pdf
+```
