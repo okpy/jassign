@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="jassign",
-    version="0.0.5",
+    version="0.0.6",
     author="John DeNero",
     author_email="denero@berkeley.edu",
     description="Jupyter notebook assignment formatting and distribution",

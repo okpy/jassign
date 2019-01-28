@@ -28,16 +28,13 @@ def generate_pdf(nb_path, pdf_path, **kwargs):
     assert run_from_ipython(), "You must run this from within a notebook"
     print("Generating PDF...")
     filtered = load_and_filter(nb_path)
-    if not export_notebook(filtered, pdf_path, **kwargs):
+    success = export_notebook(filtered, pdf_path, **kwargs)
+    if not success:
         display(HTML(
-            """<h2>Export to PDF failed. Please read the error message above.</h2>
-            Try running one of these functions to debug:
-            <ul>
-            <li> generate_submission({nb}, {pdf}, debug=True) # See full error message
-            <li> cell_by_cell({nb}) # See which cell is causing you grief
-            </ul>
-            """.format(nb=nb_path, pdf=pdf_path)
+            "<h2>Export to PDF failed. Read the error above, fix it, SAVE, and try again!</h2>"
+            "<h3>Running each cell individually to locate the problem...</h3>"
             ))
+        cell_by_cell(nb_path)
 
 
 def cell_by_cell(nb_path):
@@ -121,7 +118,7 @@ def clean_cells(cells):
                 if output.get('output_type', 'NA') == 'error' and 'traceback' in output:
                     output['traceback'] = output['traceback'][:1]
 
-        if 'source' in cell and (cell['source'].count('\n') > 30 or len(cell['source']) > 4000):
+        if 'source' in cell and (cell['source'].count('\n') > 60 or len(cell['source']) > 8000):
             print('This cell has a lot of content! Perhaps try to shorten your response. ')
             print("\n\n\n", cell['source'][:200])
 
