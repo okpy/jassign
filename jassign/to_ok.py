@@ -20,7 +20,7 @@ ALLOWED_NAME = re.compile(r'[A-Za-z][A-Za-z0-9_]*')
 NB_VERSION = 4
 
 
-def convert_to_ok(nb_path, dir, endpoint):
+def convert_to_ok(nb_path, dir, endpoint, no_submit_cell=False):
     """Convert a master notebook to an ok notebook, tests dir, and .ok file.
 
     nb -- Path
@@ -36,8 +36,11 @@ def convert_to_ok(nb_path, dir, endpoint):
     ok_cells, require_pdf = gen_ok_cells(nb['cells'], tests_dir)
     dot_ok_name = gen_dot_ok(ok_nb_path, endpoint, require_pdf)
     init = gen_init_cell(dot_ok_name)
-    submit = gen_submit_cell(nb_path, require_pdf)
-    nb['cells'] = [init] + ok_cells + [submit]
+
+    nb['cells'] = [init] + ok_cells
+    if not no_submit_cell:
+        submit = gen_submit_cell(nb_path, require_pdf)
+        nb['cells'] += [submit]
     remove_output(nb)
 
     with open(ok_nb_path, 'w') as f:
@@ -348,7 +351,7 @@ def lock(cell):
     m["deletable"] = False
 
 
-def gen_views(master_nb, result_dir, endpoint):
+def gen_views(master_nb, result_dir, endpoint, no_submit_cell):
     """Generate student and autograder views.
 
     master_nb -- Dict of master notebook JSON
@@ -358,7 +361,7 @@ def gen_views(master_nb, result_dir, endpoint):
     student_dir = result_dir / 'student'
     trash_dir = result_dir / 'trash'
     os.makedirs(autograder_dir, exist_ok=True)
-    ok_nb_path = convert_to_ok(master_nb, autograder_dir, endpoint)
+    ok_nb_path = convert_to_ok(master_nb, autograder_dir, endpoint, no_submit_cell)
     shutil.copytree(autograder_dir, student_dir)
     student_nb_path = student_dir / ok_nb_path.name
     os.remove(student_nb_path)
