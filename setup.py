@@ -25,4 +25,7 @@ setuptools.setup(
             'jassign-pdf = jassign.jassign_pdf:main'
         ]
     },
+    install_requires=[
+        "pyyaml", "okpy", "nbformat", "ipython", "nbconvert", "tqdm", "setuptools"
+    ],
 )
