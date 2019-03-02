@@ -3,7 +3,7 @@
 import argparse
 import pathlib
 
-from to_ok import gen_views
+from .to_ok import gen_views
 
 def parse_args():
     parser = argparse.ArgumentParser()
