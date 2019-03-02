@@ -2,7 +2,11 @@
 
 import argparse
 
-from .to_pdf import generate_pdf_cmdline
+try:
+    from .to_pdf import generate_pdf_cmdline
+except ImportError:
+    from to_pdf import generate_pdf_cmdline
+
 
 def parse_args():
     parser = argparse.ArgumentParser()

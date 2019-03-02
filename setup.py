@@ -3,6 +3,12 @@ import setuptools
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
+okpy = [] # By default, do not require okpy so Gofer-Grader can be used instead.
+try:
+    import client
+except ImportError:
+    okpy = ['okpy']
+
 setuptools.setup(
     name="jassign",
     version="0.0.6",
@@ -25,7 +31,7 @@ setuptools.setup(
             'jassign-pdf = jassign.jassign_pdf:main'
         ]
     },
-    install_requires=[
-        "pyyaml", "okpy", "nbformat", "ipython", "nbconvert", "tqdm", "setuptools"
+    install_requires=okpy + [
+        "pyyaml", "nbformat", "ipython", "nbconvert", "tqdm", "setuptools"
     ],
 )
