@@ -28,12 +28,18 @@ def convert_to_ok(nb_path, dir, endpoint, no_submit_cell=False):
     dir -- Path
     """
     ok_nb_path = dir / nb_path.name
-    tests_dir = dir / 'tests'
+    # Directory with tests
+    tests_dir = dir / 'tests' 
     os.makedirs(tests_dir, exist_ok=True)
     open(tests_dir / '__init__.py', 'a').close()
 
+    # Directory with every test public and unlocked
+    open_tests_dir = dir / 'open_tests'
+    os.makedirs(open_tests_dir, exist_ok=True)
+    open(open_tests_dir / '__init__.py', 'a').close()
+
     nb = nbformat.read(open(nb_path), NB_VERSION)
-    ok_cells, require_pdf = gen_ok_cells(nb['cells'], tests_dir)
+    ok_cells, require_pdf = gen_ok_cells(nb['cells'], tests_dir, open_tests_dir)
     dot_ok_name = gen_dot_ok(ok_nb_path, endpoint, require_pdf)
     init = gen_init_cell(dot_ok_name)
 
@@ -96,7 +102,7 @@ def gen_submit_cell(nb_path, require_pdf):
     return cell
 
 
-def gen_ok_cells(cells, tests_dir):
+def gen_ok_cells(cells, tests_dir, open_tests_dir):
     """Generate notebook cells for the OK version of a master notebook."""
     ok_cells = []
     question = {}
@@ -117,7 +123,7 @@ def gen_ok_cells(cells, tests_dir):
             if question and processed_response:
                 # The question is over
                 if tests:
-                    ok_cells.append(gen_test_cell(question, tests, tests_dir))
+                    ok_cells.append(gen_test_cell(question, tests, tests_dir, open_tests_dir))
                 question, processed_response, tests = {}, False, []
             if is_question_cell(cell):
                 # TODO(denero) format notebook for PDF generation
@@ -131,7 +137,7 @@ def gen_ok_cells(cells, tests_dir):
                 ok_cells.append(cell)
 
     if tests:
-        ok_cells.append(gen_test_cell(question, tests, tests_dir))
+        ok_cells.append(gen_test_cell(question, tests, tests_dir, open_tests_dir))
 
     return ok_cells, require_pdf
 
@@ -222,35 +228,56 @@ def read_test(cell):
     return Test('\n'.join(get_source(cell)[1:]), output, hidden)
 
 
-def gen_test_cell(question, tests, tests_dir):
+def gen_test_cell(question, tests, tests_dir, open_tests_dir):
     """Return a test cell."""
     cell = nbformat.v4.new_code_cell()
     cell.source = ['ok.grade("{}");'.format(question['name'])]
-    suites = [gen_suite(tests)]
+    suites = gen_suite(tests)
     test = {
         'name': question['name'],
         'points': question.get('points', 1),
-        'suites': suites,
+        'suites': [suites[0]],
     }
     with open(tests_dir / (question['name'] + '.py'), 'w') as f:
         f.write('test = ')
         # TODO(denero) Not the same indentation and line breaking that ok generates...
         pprint.pprint(test, f, indent=4)
     lock(cell)
+
+    open_test = {
+    'name': question['name'],
+    'points': question.get('points', 1),
+    'suites': [suites[1]],
+    }
+    with open(open_tests_dir / (question['name'] + '.py'), 'w') as f:
+        f.write('test = ')
+        # TODO(denero) Not the same indentation and line breaking that ok generates...
+        pprint.pprint(open_test, f, indent=4)
+
     return cell
 
 
 def gen_suite(tests):
-    """Generate an ok test suite for a test."""
-    cases = [gen_case(test) for test in tests]
+    """Generate an ok test suite for a test. Returns the default suite
+    and the suite of open test cases. """
+
+    # Each element is a tuple of (test_case, open_test_case).
+    # An open_test_case has hidden == False and locked == False
+    # and is used for autograding.
+    cases = [gen_case(test) for test in tests] 
     return  {
-      'cases': cases,
+      'cases': [case[0] for case in cases],
+      'scored': True,
+      'setup': '',
+      'teardown': '',
+      'type': 'doctest'
+    }, {
+      'cases': [case[1] for case in cases],
       'scored': True,
       'setup': '',
       'teardown': '',
       'type': 'doctest'
     }
-
 
 def gen_case(test):
     """Generate an ok test case for a test."""
@@ -269,6 +296,10 @@ def gen_case(test):
     return {
         'code': '\n'.join(code_lines),
         'hidden': test.hidden,
+        'locked': False
+    }, {
+        'code': '\n'.join(code_lines),
+        'hidden': False,
         'locked': False
     }
 
@@ -362,7 +393,14 @@ def gen_views(master_nb, result_dir, endpoint, no_submit_cell):
     trash_dir = result_dir / 'trash'
     os.makedirs(autograder_dir, exist_ok=True)
     ok_nb_path = convert_to_ok(master_nb, autograder_dir, endpoint, no_submit_cell)
+    
     shutil.copytree(autograder_dir, student_dir)
+    # In the autograder view, use the test files in the open_tests/ directory.
+    shutil.rmtree(autograder_dir / "tests")
+    shutil.move(autograder_dir / "open_tests", autograder_dir / "tests")
+    # In the student view, use the test files in the tests/ directory.
+    shutil.rmtree(student_dir / "open_tests")
+    
     student_nb_path = student_dir / ok_nb_path.name
     os.remove(student_nb_path)
     strip_solutions(ok_nb_path, student_nb_path)
