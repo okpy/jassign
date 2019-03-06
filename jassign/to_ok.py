@@ -382,7 +382,7 @@ def lock(cell):
     m["deletable"] = False
 
 
-def gen_views(master_nb, result_dir, endpoint, no_submit_cell):
+def gen_views(master_nb, result_dir, endpoint, no_submit_cell, open_ag_tests):
     """Generate student and autograder views.
 
     master_nb -- Dict of master notebook JSON
@@ -395,9 +395,13 @@ def gen_views(master_nb, result_dir, endpoint, no_submit_cell):
     ok_nb_path = convert_to_ok(master_nb, autograder_dir, endpoint, no_submit_cell)
     
     shutil.copytree(autograder_dir, student_dir)
-    # In the autograder view, use the test files in the open_tests/ directory.
-    shutil.rmtree(autograder_dir / "tests")
-    shutil.move(autograder_dir / "open_tests", autograder_dir / "tests")
+    if open_ag_tests:
+        # In the autograder view, use the test files in the open_tests/ directory.
+        shutil.rmtree(autograder_dir / "tests")
+        shutil.move(autograder_dir / "open_tests", autograder_dir / "tests")
+    else:
+        # In the autograder view, use the test files in the tests/ directory.
+        shutil.rmtree(autograder_dir / "open_tests")
     # In the student view, use the test files in the tests/ directory.
     shutil.rmtree(student_dir / "open_tests")
     

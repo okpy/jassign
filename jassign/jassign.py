@@ -16,13 +16,16 @@ def parse_args():
     parser.add_argument("--no-submit-cell", help="Don't output submit cell at end of notebook",
     	dest="no_submit_cell", const=True, default=False, action="store_const"
     	)
+    parser.add_argument("--open-ag-tests", help="Unlock and unhide all test cases for autograder view",
+        dest="open_ag_tests", const=True, default=False, action="store_const"
+        )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
     gen_views(pathlib.Path(args.master), pathlib.Path(args.result),
-              args.endpoint, args.no_submit_cell)
+              args.endpoint, args.no_submit_cell, args.open_ag_tests)
 
 if __name__ == "__main__":
     main()
