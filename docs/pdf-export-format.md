@@ -8,7 +8,7 @@ has these characteristics:
 
 1. Each page of the output contains one question cell, one response cell, and
    all output of that response cell.
-2. The format is optimized for questions that can be answered in a single page.
+2. The format is optimized for questions that can be answered in at most two pages.
 3. The student response to a question will appear in a consistent location
    within the generated PDF.
 3. Metadata are expressed within notebook cells.
@@ -23,6 +23,10 @@ A question is a description markdown cell followed by a response cell. The
 description cell should contain `<!-- EXPORT TO PDF -->`. This annotation will
 ensure that both the annotated cell and following response cell are exported to
 the same page of the PDF.
+
+Optionally, a format restriction can be included in the export comment. The only format restriction currently supported is `image`. For a question with a required response image, the description cell should contain:
+
+`<!-- EXPORT TO PDF format:image -->`
 
 ## Other
 

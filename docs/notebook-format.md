@@ -37,6 +37,7 @@ with the following fields (in any order):
 * name (required) - a string identifier that is a legal file name.
 * manual (optional) - a boolean (default False); whether to include the response
   cell in a PDF for manual grading.
+* format (optional) - a string (default ""); whether the response cell output is expected to be in a particular format, such as `"image"`.
 * points (optional) - a number (default 1); how many points the question is
   worth.
 

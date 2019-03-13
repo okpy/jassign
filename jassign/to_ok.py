@@ -20,7 +20,7 @@ ALLOWED_NAME = re.compile(r'[A-Za-z][A-Za-z0-9_]*')
 NB_VERSION = 4
 
 
-def convert_to_ok(nb_path, dir, endpoint, no_submit_cell=False):
+def convert_to_ok(nb_path, dir, args):
     """Convert a master notebook to an ok notebook, tests dir, and .ok file.
 
     nb -- Path
@@ -33,14 +33,13 @@ def convert_to_ok(nb_path, dir, endpoint, no_submit_cell=False):
     open(tests_dir / '__init__.py', 'a').close()
 
     nb = nbformat.read(open(nb_path), NB_VERSION)
-    ok_cells, require_pdf = gen_ok_cells(nb['cells'], tests_dir)
-    dot_ok_name = gen_dot_ok(ok_nb_path, endpoint, require_pdf)
+    ok_cells, manual_questions = gen_ok_cells(nb['cells'], tests_dir)
+    dot_ok_name = gen_dot_ok(ok_nb_path, args.endpoint)
     init = gen_init_cell(dot_ok_name)
 
     nb['cells'] = [init] + ok_cells
-    if not no_submit_cell:
-        submit = gen_submit_cell(nb_path, require_pdf)
-        nb['cells'] += [submit]
+    if not args.no_submit_cell:
+        nb['cells'] += gen_submit_cells(nb_path, manual_questions, args.instructions)
     remove_output(nb)
 
     with open(ok_nb_path, 'w') as f:
@@ -48,7 +47,7 @@ def convert_to_ok(nb_path, dir, endpoint, no_submit_cell=False):
     return ok_nb_path
 
 
-def gen_dot_ok(notebook_path, endpoint, has_pdf):
+def gen_dot_ok(notebook_path, endpoint):
     """Generate .ok file and return its name."""
     assert notebook_path.suffix == '.ipynb', notebook_path
     ok_path = notebook_path.with_suffix('.ok')
@@ -81,30 +80,42 @@ def gen_init_cell(dot_ok_name):
     return cell
 
 
-def gen_submit_cell(nb_path, require_pdf):
-    """Generate a submit cell."""
-    cell = nbformat.v4.new_code_cell()
+def gen_submit_cells(nb_path, manual_questions, instruction_text):
+    """Generate submit cells."""
+    instructions = nbformat.v4.new_markdown_cell()
     # TODO(denero) Force save.
+    instructions.source = "# Submit\nMake sure you have run all cells in your notebook in order before running the cell below, so that all images/graphs appear in the output.\n**Please save before submitting!**"
+    if instruction_text:
+        instructions.source += '\n\n' + instruction_text
+    if manual_questions:
+        n = len(manual_questions)
+        instructions.source += f'\n\n<!-- EXPECT {n} EXPORTED QUESTIONS -->'
+
+    submit = nbformat.v4.new_code_cell()
     source_lines = ["# Save your notebook first, then run this cell to submit."]
-    if require_pdf:
+    if manual_questions:
         source_lines.append("import jassign.to_pdf")
         source_lines.append("jassign.to_pdf.generate_pdf('{}', '{}')".format(
             nb_path.name, nb_path.with_suffix('.pdf').name))
     source_lines.append("ok.submit()")
-    cell.source = "\n".join(source_lines)
-    lock(cell)
-    return cell
+    submit.source = "\n".join(source_lines)
+    lock(instructions)
+    lock(submit)
+    return [instructions, submit]
 
 
 def gen_ok_cells(cells, tests_dir):
-    """Generate notebook cells for the OK version of a master notebook."""
+    """Generate notebook cells for the OK version of a master notebook.
+
+    Returns:
+        (ok_cells, list of manual question names)
+    """
     ok_cells = []
     question = {}
     processed_response = False
     tests = []
-    require_pdf = False
+    manual_questions = []
 
-    # TODO(denero) Validate number of exported questions
     for cell in cells:
         if question and not processed_response:
             assert not is_question_cell(cell), cell
@@ -120,12 +131,12 @@ def gen_ok_cells(cells, tests_dir):
                     ok_cells.append(gen_test_cell(question, tests, tests_dir))
                 question, processed_response, tests = {}, False, []
             if is_question_cell(cell):
-                # TODO(denero) format notebook for PDF generation
                 question = read_question_metadata(cell)
                 manual = question.get('manual', False)
+                format = question.get('format', '')
                 if manual:
-                    require_pdf = True
-                ok_cells.append(gen_question_cell(cell, manual))
+                    manual_questions.append(question['name'])
+                ok_cells.append(gen_question_cell(cell, manual, format))
             else:
                 assert not is_test_cell(cell), 'Test outside of a question: ' + str(cell)
                 ok_cells.append(cell)
@@ -133,7 +144,7 @@ def gen_ok_cells(cells, tests_dir):
     if tests:
         ok_cells.append(gen_test_cell(question, tests, tests_dir))
 
-    return ok_cells, require_pdf
+    return ok_cells, manual_questions
 
 
 def get_source(cell):
@@ -164,7 +175,7 @@ def find_question_spec(source):
     return begins[0] if begins else None
 
 
-def gen_question_cell(cell, manual):
+def gen_question_cell(cell, manual, format):
     """Return the cell with metadata hidden in an HTML comment."""
     cell = copy.deepcopy(cell)
     source = get_source(cell)
@@ -176,7 +187,9 @@ def gen_question_cell(cell, manual):
         end += 1
     source[start] = "<!--"
     source[end] = "-->"
-    if manual:
+    if manual and format:
+        source.append(f'<!-- EXPORT TO PDF format:{format} -->')
+    elif manual:
         source.append('<!-- EXPORT TO PDF -->')
     cell['source'] = '\n'.join(source)
     lock(cell)
@@ -222,6 +235,13 @@ def read_test(cell):
     return Test('\n'.join(get_source(cell)[1:]), output, hidden)
 
 
+def write_test(path, test):
+    """Write an OK test file."""
+    with open(path, 'w') as f:
+        f.write('test = ')
+        pprint.pprint(test, f, indent=4)
+
+
 def gen_test_cell(question, tests, tests_dir):
     """Return a test cell."""
     cell = nbformat.v4.new_code_cell()
@@ -232,10 +252,7 @@ def gen_test_cell(question, tests, tests_dir):
         'points': question.get('points', 1),
         'suites': suites,
     }
-    with open(tests_dir / (question['name'] + '.py'), 'w') as f:
-        f.write('test = ')
-        # TODO(denero) Not the same indentation and line breaking that ok generates...
-        pprint.pprint(test, f, indent=4)
+    write_test(tests_dir / (question['name'] + '.py'), test)
     lock(cell)
     return cell
 
@@ -351,7 +368,22 @@ def lock(cell):
     m["deletable"] = False
 
 
-def gen_views(master_nb, result_dir, endpoint, no_submit_cell):
+def remove_hidden_tests(test_dir):
+    """Rewrite test files to remove hidden tests."""
+    for f in test_dir.iterdir():
+        if f.name == '__init__.py' or f.suffix != '.py':
+            continue
+        locals = {}
+        exec(open(f).read(), globals(), locals)
+        test = locals['test']
+        for suite in test['suites']:
+            for i, case in list(enumerate(suite['cases']))[::-1]:
+                if case['hidden']:
+                    suite['cases'].pop(i)
+        write_test(f, test)
+
+
+def gen_views(master_nb, result_dir, args):
     """Generate student and autograder views.
 
     master_nb -- Dict of master notebook JSON
@@ -359,24 +391,13 @@ def gen_views(master_nb, result_dir, endpoint, no_submit_cell):
     """
     autograder_dir = result_dir / 'autograder'
     student_dir = result_dir / 'student'
-    trash_dir = result_dir / 'trash'
     os.makedirs(autograder_dir, exist_ok=True)
-    ok_nb_path = convert_to_ok(master_nb, autograder_dir, endpoint, no_submit_cell)
+    ok_nb_path = convert_to_ok(master_nb, autograder_dir, args)
     shutil.copytree(autograder_dir, student_dir)
     student_nb_path = student_dir / ok_nb_path.name
     os.remove(student_nb_path)
     strip_solutions(ok_nb_path, student_nb_path)
+    remove_hidden_tests(student_dir / 'tests')
 
-    # Remove hidden tests and clean up. TODO(denero) Simplify! Don't call ok.
-    with open(os.devnull, 'w') as null:
-        subprocess.Popen(['ok', '--local', '--no-update', '--lock', '-u'],
-                         cwd=student_dir,
-                         stdout=null,
-                         ).wait()
-    os.makedirs(trash_dir, exist_ok=True)
-    if (student_dir / '.ok_history').exists():
-        shutil.move(str(student_dir / '.ok_history'), str(trash_dir))
-    if (student_dir / 'tests' / '__pycache__').exists():
-        shutil.move(str(student_dir / 'tests' / '__pycache__'), str(trash_dir))
 
 

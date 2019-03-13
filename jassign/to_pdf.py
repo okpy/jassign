@@ -29,6 +29,7 @@ def generate_pdf(nb_path, pdf_path, **kwargs):
     print("Generating PDF...")
     filtered = load_and_filter(nb_path)
     success = export_notebook(filtered, pdf_path, **kwargs)
+    # TODO check if the PDF is too short.
     if not success:
         display(HTML(
             "<h2>Export to PDF failed. Read the error above, fix it, SAVE, and try again!</h2>"
@@ -65,13 +66,20 @@ def cell_by_cell(nb_path):
             """%(cell['source'],str(error)))
 
 
-QUESTION_TAG = re.compile(r"\s*<!--\s*EXPORT TO PDF\s*-->\s*")
+QUESTION_TAG = re.compile(r"\s*<!--\s*EXPORT TO PDF\s*(format:(image))?\s*-->\s*")
 NUM_QUESTIONS_TAG = re.compile(r"\s*<!--\s*EXPECT (\d+) EXPORTED QUESTIONS\s*-->\s*")
 MATH_EXP = re.compile(r"\$[^$]+\$")
 
 
 def is_question_cell(cell):
-    return cell['cell_type'] == 'markdown' and bool(QUESTION_TAG.search(cell['source']))
+    return (cell['cell_type'] == 'markdown' and
+            bool(QUESTION_TAG.search(cell['source'])))
+
+
+def question_format(cell):
+    """Return a format restriction if there is one, otherwise a false value."""
+    _, format = QUESTION_TAG.search(cell['source']).groups()
+    return format
 
 
 def load_and_filter(nb_path):
@@ -105,7 +113,7 @@ def paraphrase(text,fromBegin=3,fromEnd=3):
 
 
 def clean_cells(cells):
-    """ Works in place """
+    """Clean cells in place."""
     for cell in cells:
         if 'outputs' in cell:
             # Paraphrase output
@@ -139,14 +147,20 @@ def check_num_questions(nb):
 
 
 def filter_nb(nb):
-    """Returns the parts of nb tagged for export."""
+    """Returns the parts of nb tagged for export and a list of question metadata."""
     new_cells = []
     for i, cell in enumerate(nb['cells']):
         if is_question_cell(cell):
+            src = str(cell["source"])
+            assert len(nb['cells']) > i + 1, 'A response cell must follow question cell ' + src
+            assert not is_question_cell(nb['cells'][i+1]), 'Two question cells in a row after ' + src
+            response = nb['cells'][i + 1]
+            if question_format(cell) == 'image':
+                assert any(k.startswith('image') for
+                           o in response["outputs"] for
+                           k in o.get("data", {}).keys()), 'Image required after ' + src
             new_cells.append(cell)
-            assert len(nb['cells']) > i + 1, 'A response cell must follow each question cell'
-            assert not is_question_cell(nb['cells'][i+1]), 'Two question cells in a row'
-            new_cells.append(nb['cells'][i + 1])
+            new_cells.append(response)
 
     clean_cells(new_cells)
     filtered = nb.copy()

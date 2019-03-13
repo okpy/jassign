@@ -11,7 +11,7 @@ except ImportError:
 
 setuptools.setup(
     name="jassign",
-    version="0.0.6",
+    version="0.0.7",
     author="John DeNero",
     author_email="denero@berkeley.edu",
     description="Jupyter notebook assignment formatting and distribution",
