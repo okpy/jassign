@@ -157,7 +157,7 @@ def filter_nb(nb):
             response = nb['cells'][i + 1]
             if question_format(cell) == 'image':
                 assert any(k.startswith('image') for
-                           o in response["outputs"] for
+                           o in response.get("outputs", {}) for
                            k in o.get("data", {}).keys()), 'Image required after ' + src
             new_cells.append(cell)
             new_cells.append(response)
