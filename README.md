@@ -43,3 +43,45 @@ You can then generate a PDF from the result:
 ```python
 jassign-pdf tests/output/autograder/example.ipynb tests/output/autograder/example.pdf
 ```
+
+
+## Caution
+
+#### Test outside of a question
+
+```
+File "/opt/conda/lib/python3.6/site-packages/jassign/to_ok.py", line 141, in gen_ok_cells
+    assert not is_test_cell(cell), 'Test outside of a question: ' + str(cell)
+AssertionError: Test outside of a question:
+```
+
+If you get this error, this means that you have _more than one cell_ between the markdown cell that declared the question (i.e., the one that contains `#BEGIN QUESTION`) and the cell that contains the `# TEST`. 
+
+
+**SOLUTION**: remove the extra code/markdown cell(s) either between the solution cell and the markdown cell with the `#BEGIN QUESTION` or between the solution cell and the `# TEST` cell.
+
+#### Test cell with a blank on the last line
+
+If your test contains a blank/newline after the test, jassign seems to automatically add a semicolon at the end of the test, thus, supressing the output of the command.
+
+Example:
+
+```
+# TEST
+movies.head(1)['plots'][0]=='Two imprisoned men bond over a number of years, finding solace and eventual redemption through acts of common decency.'
+
+```
+
+Turns into the following failed test in the students' notebook:
+
+```
+>>> movies.head(1)['plots'][0]=='Two imprisoned men bond over a number of years, finding solace and eventual redemption through acts of common decency.';
+>>> 
+
+# Error: expected
+#     True
+# but got
+
+```
+
+**SOLUTION**: remove the blank line at the end of the `# TEST` cell.
