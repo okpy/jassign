@@ -1,4 +1,7 @@
 # jassign: Jupyter Notebook Assignments
+
+**This project is DEPRECATED because its functionality now exists in [otter grader](https://github.com/ucbds-infra/otter-grader). Use that instead!**
+
 Format and tools for authoring and distributing Jupyter notebook assignments
 
 Requires: **Python 3** (even if it's installed, check that it's your working version `python --version`)
